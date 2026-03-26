@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRL Sensitivity Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg:        #080c14;
+    --panel:     #0d1525;
+    --border:    #1a2840;
+    --accent:    #3dd6f5;
+    --accent2:   #f5a623;
+    --accent3:   #7ed321;
+    --accent4:   #e05c5c;
+    --text:      #c8d8f0;
+    --muted:     #4a6080;
+    --label:     #8aaac8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    padding: 24px;
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(61,214,245,0.04) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(126,211,33,0.03) 0%, transparent 50%);
+  }
+
+  header {
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 16px;
+  }
+
+  header h1 {
+    font-family: 'Space Mono', monospace;
+    font-size: 1.1rem;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  header p {
+    font-size: 0.78rem;
+    color: var(--muted);
+    letter-spacing: 0.04em;
+  }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  /* ── Controls panel ── */
+  .controls {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  .ctrl-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ctrl-group-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 6px;
+  }
+
+  .ctrl-row {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .ctrl-label {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--label);
+  }
+
+  .ctrl-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--accent2);
+  }
+
+  input[type=range] {
+    -webkit-appearance: none;
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    box-shadow: 0 0 8px rgba(61,214,245,0.5);
+  }
+
+  /* toggle */
+  .toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--label);
+  }
+
+  .toggle {
+    position: relative;
+    width: 36px;
+    height: 18px;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider-tog {
+    position: absolute;
+    inset: 0;
+    background: var(--border);
+    border-radius: 18px;
+    cursor: pointer;
+    transition: .2s;
+  }
+  .slider-tog:before {
+    content: '';
+    position: absolute;
+    width: 12px; height: 12px;
+    left: 3px; top: 3px;
+    background: var(--muted);
+    border-radius: 50%;
+    transition: .2s;
+  }
+  input:checked + .slider-tog { background: rgba(61,214,245,0.3); }
+  input:checked + .slider-tog:before {
+    transform: translateX(18px);
+    background: var(--accent);
+    box-shadow: 0 0 6px rgba(61,214,245,0.6);
+  }
+
+  /* ── Chart panel ── */
+  .chart-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .chart-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .chart-title {
+    font-family: 'Space Mono', monospace;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--label);
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    color: var(--label);
+  }
+
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+  }
+
+  canvas { width: 100% !important; }
+
+  /* ── Metrics strip ── */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .metric-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+  }
+
+  .metric-label {
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+
+  .metric-value {
+    font-family: 'Space Mono', monospace;
+    font-size: 1rem;
+    color: var(--accent);
+  }
+
+  .metric-unit {
+    font-size: 0.65rem;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  /* ── Info box ── */
+  .info-box {
+    background: rgba(61,214,245,0.05);
+    border: 1px solid rgba(61,214,245,0.15);
+    border-radius: 6px;
+    padding: 10px 14px;
+    font-size: 0.72rem;
+    color: var(--label);
+    line-height: 1.6;
+    margin-top: 12px;
+  }
+
+  .info-box strong { color: var(--accent2); font-weight: 500; }
+
+  .sep { border: none; border-top: 1px solid var(--border); }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .metrics { grid-template-columns: repeat(2,1fr); }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>RRL Sensitivity Calculator</h1>
+  <p>Carbon α recombination line detectability · 1 – 30 MHz</p>
+</header>
+
+<div class="layout">
+
+  <!-- ── Controls ── -->
+  <div class="controls">
+
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">Instrument</div>
+
+      <div class="toggle-row">
+        <span>A<sub>eff</sub> = λ²/4 · η (freq. dependent)</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-aeff-freq" checked>
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+
+      <!-- Shown when freq-dependent ON -->
+      <div id="row-aeff-freq">
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>Efficiency η</span>
+            <span class="ctrl-value" id="val-aeff">η = 1.00</span>
+          </div>
+          <input type="range" id="sl-aeff" min="0.01" max="1" step="0.01" value="1">
+        </div>
+        <div class="info-box" style="margin-top:0; font-size:0.68rem">
+          A<sub>eff</sub>(ν) = λ²/4 · η = c²/(4ν²) · η.
+          At 10 MHz: <strong id="aeff-10">225 m²</strong> &nbsp;|&nbsp;
+          At 30 MHz: <strong id="aeff-30">25 m²</strong>
+        </div>
+      </div>
+
+      <!-- Shown when freq-dependent OFF -->
+      <div id="row-aeff-fixed" style="display:none">
+        <div class="ctrl-row">
+          <div class="ctrl-label">
+            <span>Fixed A<sub>eff</sub></span>
+            <span class="ctrl-value" id="val-aeff-fixed">10 m²</span>
+          </div>
+          <input type="range" id="sl-aeff-fixed" min="0.5" max="500" step="0.5" value="10">
+        </div>
+        <div class="info-box" style="margin-top:0; font-size:0.68rem">
+          Constant effective area across the band — useful for comparing
+          against a specific antenna design or physical aperture.
+        </div>
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>Integration time τ</span>
+          <span class="ctrl-value" id="val-tau">10⁴ s</span>
+        </div>
+        <input type="range" id="sl-tau" min="1" max="6" step="0.1" value="4">
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>Spectral resolution Δν</span>
+          <span class="ctrl-value" id="val-dnu">1 kHz</span>
+        </div>
+        <input type="range" id="sl-dnu" min="0.5" max="20" step="0.5" value="1">
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>N stacked lines</span>
+          <span class="ctrl-value" id="val-nlines">78</span>
+        </div>
+        <input type="range" id="sl-nlines" min="5" max="300" step="5" value="78">
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">Beam &amp; Dilution</div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>Beam FWHM θ</span>
+          <span class="ctrl-value" id="val-beam">1°</span>
+        </div>
+        <input type="range" id="sl-beam" min="1" max="110" step="1" value="1">
+      </div>
+
+      <div class="toggle-row">
+        <span>Apply beam dilution to T<sub>RRL</sub></span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-dilution" checked>
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+
+      <div class="info-box" style="margin-top:0">
+        Beam dilution factor = 1/θ (EDGES case: Galactic plane fills the
+        beam in longitude but is narrow in latitude, so dilution is 1D).
+        At θ = 1° no dilution. Larger beams reduce the apparent
+        <strong>T<sub>RRL</sub></strong> linearly with beam width.
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">Signal Model</div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>T<sub>RRL</sub> ref at 60 MHz (mK)</span>
+          <span class="ctrl-value" id="val-trrl">100 mK</span>
+        </div>
+        <input type="range" id="sl-trrl" min="10" max="40000" step="100" value="100">
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>Spectral index β</span>
+          <span class="ctrl-value" id="val-beta">−2.71</span>
+        </div>
+        <input type="range" id="sl-beta" min="-5" max="-1" step="0.05" value="-2.71">
+      </div>
+
+      <div class="toggle-row">
+        <span>Galaxy-up (T<sub>sky</sub> ×10)</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-galaxy">
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">Sky Spectrum</div>
+
+      <div class="toggle-row">
+        <span>Free-free absorption turnover</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-turnover" checked>
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+
+      <div class="ctrl-row">
+        <div class="ctrl-label">
+          <span>Turnover frequency ν<sub>t</sub></span>
+          <span class="ctrl-value" id="val-turnover">6.0 MHz</span>
+        </div>
+        <input type="range" id="sl-turnover" min="1" max="15" step="0.5" value="6">
+      </div>
+
+      <div class="info-box" style="margin-top:0">
+        Free-free absorption suppresses T<sub>sky</sub> below the turnover.
+        τ<sub>ff</sub>(ν) = (ν<sub>t</sub>/ν)<sup>2.1</sup>, so
+        T<sub>obs</sub> = T<sub>sync</sub> · e<sup>−τ<sub>ff</sub></sup>.
+        This also <strong>reduces σ<sub>T</sub></strong> at low ν since
+        T<sub>sys</sub> drops — actually <em>improving</em> sensitivity there.
+      </div>
+    </div>
+
+    <hr class="sep">
+
+    <div class="ctrl-group">
+      <div class="ctrl-group-title">Display</div>
+      <div class="toggle-row">
+        <span>Show linewidth curve</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-linewidth" checked>
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <span>Log scale Y-axis</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-log" checked>
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <span>Log scale linewidth axis</span>
+        <label class="toggle">
+          <input type="checkbox" id="tog-log-lw">
+          <span class="slider-tog"></span>
+        </label>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── Chart ── -->
+  <div class="chart-panel">
+    <div class="chart-header">
+      <span class="chart-title">Sensitivity vs Frequency</span>
+      <div class="legend">
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#ffffff"></div>
+          <span>σ<sub>T</sub> sensitivity</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#7ed321"></div>
+          <span>T<sub>RRL</sub> signal</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#ffffff; opacity:0.5; border: 1px dashed #fff"></div>
+          <span>Linewidth FWHM</span>
+        </div>
+        <div class="legend-item">
+          <div class="legend-dot" style="background:#e05c5c; opacity:0.5"></div>
+          <span>T<sub>sky</sub></span>
+        </div>
+      </div>
+    </div>
+
+    <canvas id="myChart" height="380"></canvas>
+
+    <div class="metrics" id="metrics-strip"></div>
+
+    <div class="info-box">
+      <strong>σ<sub>T</sub></strong> = T<sub>sys</sub> / √(Δν · τ · N<sub>lines</sub>) &nbsp;|&nbsp;
+      T<sub>sky</sub> = 60·(ν/300)<sup>−2.55</sup> · e<sup>−(ν<sub>t</sub>/ν)<sup>2.1</sup></sup> K &nbsp;|&nbsp;
+      T<sub>RRL</sub>(ν) = T<sub>ref</sub>·(ν/60)<sup>β</sup> / dilution &nbsp;|&nbsp;
+      Linewidth: pressure broadening ∝ ν<sup>−2.47</sup> + Doppler ∝ ν.
+      <br>SNR = T<sub>RRL</sub> / σ<sub>T</sub>. Detection requires SNR &gt; 3. Free-free turnover suppresses both T<sub>sky</sub> and σ<sub>T</sub> below ν<sub>t</sub>.
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── Physics functions ──────────────────────────────────────────────
+
+function tSky(nu_MHz, nu_turnover_MHz, applyTurnover, galaxyUp) {
+  // Galactic synchrotron brightness temperature (power law)
+  // Galaxy-up: galactic plane in beam raises T_sky ~10x
+  const T_sync = 60 * Math.pow(nu_MHz / 300, -2.55) * (galaxyUp ? 10 : 1); // K
+  if (!applyTurnover) return T_sync;
+  // Free-free absorption: tau_ff(nu) = (nu_t/nu)^2.1
+  const tau_ff = Math.pow(nu_turnover_MHz / nu_MHz, 2.1);
+  return T_sync * Math.exp(-tau_ff);
+}
+
+function aEff(nu_MHz, eta, freqDep, fixedAeff) {
+  if (!freqDep) return fixedAeff;
+  const c = 3e8;
+  const nu_Hz = nu_MHz * 1e6;
+  return eta * (c * c) / (4 * nu_Hz * nu_Hz); // m^2
+}
+
+function sigmaTnoise(nu_MHz, eta, tau_s, dnu_Hz, Nlines, nu_turnover_MHz, applyTurnover, freqDep, fixedAeff, galaxyUp) {
+  const Tsys = tSky(nu_MHz, nu_turnover_MHz, applyTurnover, galaxyUp);
+  // In the sky-noise limited (externally limited) regime:
+  // sigma_T = T_sys / sqrt(dnu * tau * N)
+  // Aeff cancels in brightness temperature sensitivity.
+  // When NOT externally limited (small Aeff), receiver noise dominates
+  // and sensitivity degrades — approximate that here by checking if
+  // Aeff is small relative to lambda^2/4.
+  const Aeff_actual = aEff(nu_MHz, eta, freqDep, fixedAeff);
+  const Aeff_max = aEff(nu_MHz, 1.0, true, fixedAeff); // lambda^2/4
+  // Effective T_sys: if Aeff < Aeff_max, receiver noise adds in
+  // T_sys_eff = T_sky + T_rx, where T_rx ~ T_sky * (Aeff_max/Aeff - 1)
+  // simplifies to T_sys_eff = T_sky * (Aeff_max / Aeff)
+  const factor = freqDep ? (1 / eta) : (Aeff_max / Aeff_actual);
+  const Tsys_eff = Tsys * Math.max(1, factor);
+  return Tsys_eff / Math.sqrt(dnu_Hz * tau_s * Nlines);
+}
+
+function tRRL_signal(nu_MHz, Tref_mK, beta, beamDeg, applyDilution) {
+  // Scale from user-set reference at 60 MHz
+  let T = (Tref_mK / 1000) * Math.pow(nu_MHz / 60, beta); // K
+  // Beam dilution (EDGES case): 1D, scaling as 1/θ
+  if (applyDilution && beamDeg > 1) {
+    T = T / beamDeg;
+  }
+  return Math.abs(T);
+}
+
+function linewidthFWHM_kHz(nu_MHz) {
+  // Doppler contribution (Eq 4 from Vydula, ~proportional to nu)
+  const doppler = 6 * (nu_MHz / 30); // kHz, ~6 kHz at 30 MHz
+  // Pressure broadening: ~1.5 kHz at 30 MHz, scales as nu^-2.47
+  const pressure = 1.8 * Math.pow(nu_MHz / 30, -2.47);
+  // Combine in quadrature (Voigt ~ approximate)
+  return Math.sqrt(doppler * doppler + pressure * pressure);
+}
+
+function snr(signal_K, noise_K) {
+  return signal_K / noise_K;
+}
+
+// ── Chart setup ────────────────────────────────────────────────────
+
+const freqs = [];
+for (let f = 1; f <= 30; f += 0.25) freqs.push(f);
+
+const ctx = document.getElementById('myChart').getContext('2d');
+
+Chart.defaults.color = '#4a6080';
+Chart.defaults.borderColor = '#1a2840';
+
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: freqs,
+    datasets: [
+      {
+        label: 'σ_T sensitivity (K)',
+        data: [],
+        borderColor: '#ffffff',
+        backgroundColor: 'rgba(255,255,255,0.04)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+        yAxisID: 'y',
+      },
+      {
+        label: 'T_RRL signal (K)',
+        data: [],
+        borderColor: '#7ed321',
+        backgroundColor: 'rgba(126,211,33,0.06)',
+        borderWidth: 2,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+        yAxisID: 'y',
+        borderDash: [6,3],
+      },
+      {
+        label: 'Linewidth FWHM (kHz)',
+        data: [],
+        borderColor: 'rgba(255,255,255,0.6)',
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+        yAxisID: 'y2',
+        borderDash: [4,4],
+        hidden: false,
+      },
+      {
+        label: 'T_sky (K)',
+        data: [],
+        borderColor: 'rgba(224,92,92,0.4)',
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3,
+        yAxisID: 'y',
+        borderDash: [2,4],
+      },
+    ],
+  },
+  options: {
+    responsive: true,
+    animation: { duration: 200 },
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#0d1525',
+        borderColor: '#1a2840',
+        borderWidth: 1,
+        titleColor: '#3dd6f5',
+        bodyColor: '#8aaac8',
+        titleFont: { family: 'Space Mono', size: 11 },
+        bodyFont: { family: 'DM Sans', size: 11 },
+        callbacks: {
+          title: ctx => `ν = ${ctx[0].label} MHz`,
+          label: ctx => {
+            const v = ctx.raw;
+            if (v === null || v === undefined) return '';
+            const label = ctx.dataset.label;
+            if (label.includes('kHz')) return ` ${label}: ${v.toFixed(2)} kHz`;
+            if (v >= 1) return ` ${label}: ${v.toFixed(0)} K`;
+            return ` ${label}: ${(v*1000).toFixed(2)} mK`;
+          }
+        }
+      }
+    },
+    scales: {
+      x: {
+        type: 'linear',
+        title: { display: true, text: 'Frequency (MHz)', color: '#4a6080',
+                 font: { family: 'Space Mono', size: 10 } },
+        ticks: { color: '#4a6080', font: { size: 10 },
+                 callback: v => v % 5 === 0 ? v : '' },
+        grid: { color: 'rgba(26,40,64,0.8)' },
+        min: 1, max: 30,
+      },
+      y: {
+        type: 'logarithmic',
+        title: { display: true, text: 'Temperature (K)', color: '#4a6080',
+                 font: { family: 'Space Mono', size: 10 } },
+        ticks: { color: '#4a6080', font: { size: 10 },
+                 callback: v => {
+                   if (v >= 1e6) return (v/1e6).toFixed(0)+'M K';
+                   if (v >= 1) return v.toFixed(0)+' K';
+                   return (v*1000).toFixed(0)+' mK';
+                 }},
+        grid: { color: 'rgba(26,40,64,0.8)' },
+        min: 1e-4,
+      },
+      y2: {
+        type: 'linear',
+        position: 'right',
+        title: { display: true, text: 'Linewidth FWHM (kHz)', color: 'rgba(255,255,255,0.5)',
+                 font: { family: 'Space Mono', size: 10 } },
+        ticks: { color: 'rgba(255,255,255,0.5)', font: { size: 10 } },
+        grid: { display: false },
+        min: 0,
+      }
+    }
+  }
+});
+
+// ── Read controls ──────────────────────────────────────────────────
+
+function getParams() {
+  const tauExp = parseFloat(document.getElementById('sl-tau').value);
+  return {
+    eta:         parseFloat(document.getElementById('sl-aeff').value),
+    freqDepAeff: document.getElementById('tog-aeff-freq').checked,
+    fixedAeff:   parseFloat(document.getElementById('sl-aeff-fixed').value),
+    tau:         Math.pow(10, tauExp),
+    dnu:         parseFloat(document.getElementById('sl-dnu').value) * 1e3, // Hz
+    Nlines:      parseInt(document.getElementById('sl-nlines').value),
+    beam:        parseFloat(document.getElementById('sl-beam').value),
+    applyDilut:  document.getElementById('tog-dilution').checked,
+    Tref_mK:     parseFloat(document.getElementById('sl-trrl').value),
+    beta:        parseFloat(document.getElementById('sl-beta').value),
+    galaxyUp:    document.getElementById('tog-galaxy').checked,
+    showLW:      document.getElementById('tog-linewidth').checked,
+    logScale:    document.getElementById('tog-log').checked,
+    logScaleLW:  document.getElementById('tog-log-lw').checked,
+    applyTurnover: document.getElementById('tog-turnover').checked,
+    nuTurnover:  parseFloat(document.getElementById('sl-turnover').value),
+    tauExp,
+  };
+}
+
+// ── Update chart ───────────────────────────────────────────────────
+
+function update() {
+  const p = getParams();
+
+  // Update display labels
+  // Aeff controls visibility
+  document.getElementById('row-aeff-freq').style.display  = p.freqDepAeff ? '' : 'none';
+  document.getElementById('row-aeff-fixed').style.display = p.freqDepAeff ? 'none' : '';
+
+  if (p.freqDepAeff) {
+    document.getElementById('val-aeff').textContent = 'η = ' + p.eta.toFixed(2);
+    document.getElementById('aeff-10').textContent = aEff(10, p.eta, true, p.fixedAeff).toFixed(1) + ' m²';
+    document.getElementById('aeff-30').textContent = aEff(30, p.eta, true, p.fixedAeff).toFixed(1) + ' m²';
+  } else {
+    document.getElementById('val-aeff-fixed').textContent = p.fixedAeff.toFixed(1) + ' m²';
+  }
+  document.getElementById('val-tau').textContent  = '10^' + p.tauExp.toFixed(1) + ' s';
+  document.getElementById('val-dnu').textContent  = (p.dnu/1e3).toFixed(1) + ' kHz';
+  document.getElementById('val-nlines').textContent = p.Nlines;
+  document.getElementById('val-beam').textContent  = p.beam.toFixed(0) + '°';
+  const trrlRaw = parseFloat(document.getElementById('sl-trrl').value);
+  document.getElementById('val-trrl').textContent = trrlRaw >= 1000
+    ? (trrlRaw/1000).toFixed(1) + ' K'
+    : trrlRaw + ' mK';
+  document.getElementById('val-beta').textContent  = p.beta.toFixed(2);
+  document.getElementById('val-turnover').textContent = p.nuTurnover.toFixed(1) + ' MHz';
+
+  const noise   = freqs.map(f => sigmaTnoise(f, p.eta, p.tau, p.dnu, p.Nlines, p.nuTurnover, p.applyTurnover, p.freqDepAeff, p.fixedAeff, p.galaxyUp));
+  const signal  = freqs.map(f => tRRL_signal(f, p.Tref_mK, p.beta, p.beam, p.applyDilut));
+  const lwidth  = freqs.map(f => linewidthFWHM_kHz(f));
+  const skyref  = freqs.map(f => tSky(f, p.nuTurnover, p.applyTurnover, p.galaxyUp));
+
+  chart.data.datasets[0].data = noise;
+  chart.data.datasets[1].data = signal;
+  chart.data.datasets[2].data = p.showLW ? lwidth : [];
+  chart.data.datasets[3].data = skyref;
+
+  // Y-axis type
+  chart.options.scales.y.type = p.logScale ? 'logarithmic' : 'linear';
+  chart.options.scales.y.min  = p.logScale ? 1e-4 : 0;
+
+  // Linewidth axis type and visibility
+  chart.options.scales.y2.display = p.showLW;
+  chart.options.scales.y2.type = p.logScaleLW ? 'logarithmic' : 'linear';
+  chart.options.scales.y2.min  = p.logScaleLW ? 0.01 : 0;
+
+  chart.update();
+
+  // ── Metrics at key frequencies ──
+  const keyFreqs = [5, 10, 16, 30];
+  const strip = document.getElementById('metrics-strip');
+  strip.innerHTML = keyFreqs.map(f => {
+    const n  = sigmaTnoise(f, p.eta, p.tau, p.dnu, p.Nlines, p.nuTurnover, p.applyTurnover, p.freqDepAeff, p.fixedAeff, p.galaxyUp);
+    const s  = tRRL_signal(f, p.Tref_mK, p.beta, p.beam, p.applyDilut);
+    const snrVal = s / n;
+    const detected = snrVal >= 3;
+    const snrColor = snrVal >= 10 ? '#7ed321' : snrVal >= 3 ? '#f5a623' : '#e05c5c';
+    const nFmt = n < 1 ? (n*1000).toFixed(0)+' mK' : n.toFixed(2)+' K';
+    const sFmt = s < 1 ? (s*1000).toFixed(0)+' mK' : s.toFixed(2)+' K';
+    return `
+      <div class="metric-card">
+        <div class="metric-label">${f} MHz</div>
+        <div class="metric-value" style="color:${snrColor}">SNR ${snrVal.toFixed(1)}</div>
+        <div class="metric-unit">σ<sub>T</sub>=${nFmt} · T<sub>RRL</sub>=${sFmt}</div>
+        <div class="metric-unit" style="color:${snrColor};margin-top:3px">
+          ${detected ? '● DETECTABLE' : '○ below threshold'}
+        </div>
+      </div>`;
+  }).join('');
+}
+
+// ── Event listeners ────────────────────────────────────────────────
+
+document.querySelectorAll('input[type=range], input[type=checkbox]')
+  .forEach(el => el.addEventListener('input', update));
+
+update();
+</script>
+</body>
+</html>
