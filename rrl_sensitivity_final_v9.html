@@ -1,0 +1,868 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RRL Sensitivity Calculator</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500&display=swap');
+
+  /* Dark (default). Detect / no-detect uses blue / orange so it reads under red-green colour blindness. */
+  :root {
+    color-scheme: dark;
+    --bg:      #080c14;
+    --panel:   #0d1525;
+    --border:  #1a2840;
+    --grid:    rgba(26,40,64,0.8);
+    --accent:  #3dd6f5;
+    --accent-rgb: 61,214,245;
+    --accent2: #f5a623;
+    --good:    #4ea1ff;
+    --bad:     #ff9a3c;
+    --text:    #c8d8f0;
+    --value:   #e6eef9;
+    --muted:   #7f95b5;
+    --label:   #8aaac8;
+    --series-a: #3dd6f5;
+    --series-b: #c8d8f0;
+    --series-c: #4ea1ff;
+    --series-d: #ff9a3c;
+    --glow: 0.04;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:      #f4f6fa;
+    --panel:   #ffffff;
+    --border:  #d5dce7;
+    --grid:    rgba(24,33,46,0.08);
+    --accent:  #0a6f94;
+    --accent-rgb: 10,111,148;
+    --accent2: #9a5b00;
+    --good:    #1a63c7;
+    --bad:     #b35300;
+    --text:    #18212e;
+    --value:   #18212e;
+    --muted:   #5b6b80;
+    --label:   #3a4b61;
+    --series-a: #0a6f94;
+    --series-b: #3a4b61;
+    --series-c: #1a63c7;
+    --series-d: #b35300;
+    --glow: 0;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 300;
+    min-height: 100vh;
+    padding: 24px;
+    background-image:
+      radial-gradient(ellipse at 20% 10%, rgba(var(--accent-rgb), var(--glow)) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 90%, rgba(var(--accent-rgb), var(--glow)) 0%, transparent 50%);
+  }
+
+  header { margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 14px; }
+  .title-row { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .theme-btn { order: 3; margin-left: auto; align-self: center; font-size: 0.72rem; }
+  header h1 {
+    font-family: 'Space Mono', monospace; font-size: 1.1rem; color: var(--accent);
+    letter-spacing: 0.08em; text-transform: uppercase;
+  }
+  #subtitle { font-size: 0.78rem; color: var(--muted); letter-spacing: 0.04em; }
+  .howto { font-size: 0.8rem; color: var(--label); margin-top: 6px; line-height: 1.5; }
+
+  .layout { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: 16px; align-items: start; }
+
+  /* ── Controls ── */
+  .controls {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+    padding: 16px; display: flex; flex-direction: column; gap: 14px;
+    max-height: calc(100vh - 140px); overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+
+  .scenario { display: flex; flex-direction: column; gap: 6px; }
+  .scenario-row { display: flex; gap: 8px; }
+  select, button, .num {
+    background: var(--bg); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; font-family: 'DM Sans', sans-serif; font-size: 0.78rem;
+  }
+  select { padding: 6px 8px; flex: 1; min-width: 0; }
+  button { padding: 6px 10px; cursor: pointer; white-space: nowrap; }
+  button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  button:disabled { opacity: 0.4; cursor: default; }
+  .status { font-size: 0.68rem; color: var(--muted); min-height: 1em; }
+  .status.mod { color: var(--accent2); }
+
+  .section-label {
+    font-family: 'Space Mono', monospace; font-size: 0.62rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--muted);
+  }
+
+  details.grp { border-top: 1px solid var(--border); padding-top: 10px; }
+  details.grp > summary {
+    font-family: 'Space Mono', monospace; font-size: 0.66rem; text-transform: uppercase;
+    letter-spacing: 0.12em; color: var(--accent); cursor: pointer; list-style: none;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  details.grp > summary::-webkit-details-marker { display: none; }
+  details.grp > summary::after { content: '+'; color: var(--muted); font-size: 0.9rem; }
+  details.grp[open] > summary::after { content: '−'; }
+  details.grp > summary .sub {
+    text-transform: none; letter-spacing: 0; font-family: 'DM Sans', sans-serif;
+    color: var(--muted); font-size: 0.68rem; margin-left: 8px; flex: 1;
+  }
+  .grp-body { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+
+  .ctrl-row { display: flex; flex-direction: column; gap: 6px; }
+  .ctrl-row.disabled, .toggle-row.disabled { opacity: 0.35; }
+  .ctrl-label label { min-width: 0; }
+  .ctrl-label { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.76rem; color: var(--label); }
+  .val { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+  .num {
+    width: 74px; padding: 3px 6px; text-align: right;
+    font-family: 'Space Mono', monospace; font-size: 0.74rem; color: var(--value);
+  }
+  .num:focus { outline: none; border-color: var(--accent); }
+  .unit { font-size: 0.7rem; color: var(--muted); min-width: 34px; }
+  .unit-sel { padding: 2px 2px; font-size: 0.7rem; width: 52px; flex: none; color: var(--label); }
+  .hint { font-size: 0.68rem; color: var(--muted); line-height: 1.5; }
+  .hint b { color: var(--label); font-weight: 500; }
+
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { padding: 3px 8px; font-size: 0.68rem; border-radius: 12px; }
+  .chip.on { border-color: var(--accent); color: var(--accent); }
+
+  input[type=range] {
+    -webkit-appearance: none; appearance: none; width: 100%; height: 3px;
+    background: var(--border); border-radius: 2px; outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--accent); cursor: pointer; box-shadow: 0 0 6px rgba(var(--accent-rgb),0.45);
+  }
+  input[type=range]::-moz-range-thumb {
+    width: 14px; height: 14px; border: none; border-radius: 50%; background: var(--accent); cursor: pointer;
+  }
+  input[type=range]:disabled::-webkit-slider-thumb { cursor: default; box-shadow: none; }
+
+  .toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 0.76rem; color: var(--label); }
+  .toggle { position: relative; width: 36px; height: 18px; flex-shrink: 0; }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .slider-tog { position: absolute; inset: 0; background: var(--border); border-radius: 18px; cursor: pointer; transition: .2s; }
+  .slider-tog:before {
+    content: ''; position: absolute; width: 12px; height: 12px; left: 3px; top: 3px;
+    background: var(--muted); border-radius: 50%; transition: .2s;
+  }
+  input:checked + .slider-tog { background: rgba(var(--accent-rgb),0.3); }
+  input:checked + .slider-tog:before { transform: translateX(18px); background: var(--accent); }
+  input:focus-visible + .slider-tog { outline: 1px solid var(--accent); }
+
+  /* ── Results ── */
+  .results { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 24px; }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 18px 20px; }
+
+  .verdict { font-size: 0.95rem; line-height: 1.6; color: var(--text); }
+  .verdict b { font-weight: 500; }
+  .verdict .good { color: var(--good); }
+  .verdict .bad { color: var(--bad); }
+  .verdict-sub { font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 4px; flex-wrap: wrap; }
+  .tab { border-radius: 4px 4px 0 0; border-bottom: none; padding: 7px 12px; font-size: 0.74rem; color: var(--label); }
+  .tab.on { color: var(--accent); border-color: var(--accent); background: rgba(var(--accent-rgb),0.07); }
+  .chart-caption { font-size: 0.72rem; color: var(--muted); margin: 8px 0 10px; line-height: 1.5; }
+  .chart-box { position: relative; height: 340px; }
+
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .metric-card { background: var(--bg); border: 1px solid var(--border); border-left: 3px solid var(--bad); border-radius: 6px; padding: 12px; }
+  .metric-card.ok { border-left-color: var(--good); }
+  .metric-label { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px; }
+  .metric-big { font-family: 'Space Mono', monospace; font-size: 1.02rem; color: var(--text); }
+  .metric-card.ok .metric-big b { color: var(--good); }
+  .metric-card:not(.ok) .metric-big b { color: var(--bad); }
+  .metric-unit { font-size: 0.66rem; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .metric-unit b { color: var(--label); font-weight: 500; }
+
+  .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  #copy-status { font-size: 0.7rem; color: var(--good); }
+
+  details.method { font-size: 0.74rem; color: var(--label); line-height: 1.65; }
+  details.method summary { cursor: pointer; color: var(--accent); font-size: 0.74rem; }
+  details.method .body { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  details.method strong { color: var(--accent2); font-weight: 500; }
+
+  @media (max-width: 900px) {
+    body { padding: 16px; }
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .controls, .results, .panel { min-width: 0; }
+    .controls { max-height: none; overflow-y: visible; }
+    .results { position: static; }
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .chart-box { height: 280px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title-row">
+    <button id="btn-theme" class="theme-btn" aria-label="Switch light or dark theme"></button>
+    <h1>RRL Sensitivity Calculator</h1>
+    <span id="subtitle"></span>
+  </div>
+  <p class="howto">
+    Enter your instrument, observation and target, and read off how long a carbon-α detection takes
+    and where in the band. Type exact values in the boxes or drag the sliders; hover the chart
+    for values at any frequency.
+  </p>
+</header>
+
+<div class="layout">
+
+  <!-- ── Controls ── -->
+  <div class="controls">
+    <div class="scenario">
+      <div class="scenario-row" style="justify-content: space-between; align-items: center;">
+        <div class="section-label">Inputs</div>
+        <button id="btn-reset" disabled>Reset to defaults</button>
+      </div>
+      <div class="status" id="preset-status"></div>
+    </div>
+    <div id="ctrl-root"></div>
+  </div>
+
+  <!-- ── Results ── -->
+  <div class="results">
+
+    <div class="panel">
+      <div class="verdict" id="verdict"></div>
+      <div class="verdict-sub" id="verdict-sub"></div>
+    </div>
+
+    <div class="panel">
+      <div class="tabs" role="tablist">
+        <button class="tab on" data-view="time" role="tab">Time to detection</button>
+        <button class="tab" data-view="snr" role="tab">Signal vs noise</button>
+        <button class="tab" data-view="width" role="tab">Line width vs channel</button>
+      </div>
+      <div class="chart-caption" id="chart-caption"></div>
+      <div class="chart-box"><canvas id="myChart"></canvas></div>
+    </div>
+
+    <div class="metrics" id="metrics-strip"></div>
+
+    <div class="panel">
+      <div class="actions">
+        <button id="btn-copy">Copy inputs &amp; results</button>
+        <span id="copy-status"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <details class="method">
+        <summary>How it's calculated, sources, and caveats</summary>
+        <div class="body">
+          <div><strong>Line.</strong> Each Cα line has integrated optical depth ∫τdν (Hz), scaled as (ν/60 MHz)<sup>γ</sup>.
+            Its shape is a Voigt profile: Doppler FWHM ν·Δv/c, plus Lorentzian pressure (∝ν<sup>−1.47</sup>) and radiation
+            (∝ν<sup>−1.93</sup>) broadening. The optical depth seen in one channel is ∫τdν times the profile averaged over a
+            channel of width Δν centred on the line.</div>
+          <div><strong>Signal.</strong> T<sub>line</sub> = f<sub>c</sub> · τ<sub>chan</sub> · T<sub>sky</sub> (absorption, τ ≪ 1),
+            with T<sub>sky</sub> = T<sub>66</sub>(ν/66)<sup>β</sup> · e<sup>−(ν<sub>t</sub>/ν)<sup>2.1</sup></sup> (free-free turnover,
+            on by default with ν<sub>t</sub> = 4 MHz so the sky peaks near 3.7 MHz, inside the ~3–5 MHz downturn seen in
+            space-based measurements; Cong et al. 2021 summarize them). The screen is treated as cold, so its own
+            emission is ignored, and the turnover is the same in every direction even though absorption is stronger
+            along the Galactic plane.</div>
+          <div><strong>Noise.</strong> σ<sub>T</sub> = (T<sub>sky</sub> + T<sub>rx</sub>/η) / √(Δν · t · N<sub>lines</sub>).
+            With T<sub>rx</sub> = 0 and f<sub>c</sub> = 1 the SNR is τ<sub>chan</sub>√(Δν·t·N), independent of sky
+            brightness and collecting area.</div>
+          <div><strong>Pointing.</strong> With "Scale with distance from the GC" on, the sky at 66 MHz is
+            T<sub>off</sub> + (T<sub>GC</sub> − T<sub>off</sub>)·G<sub>c</sub>(ℓ, b) and the line strength is
+            ∫τ<sub>GC</sub>·G<sub>l</sub>(ℓ, b), where each G is a product of Gaussians in ℓ and b with the FWHMs under
+            Advanced physics. The line ℓ-width default follows Erickson et al. (1995), who detected carbon absorption at
+            every position within |ℓ| ≲ 20° at 76 MHz. Kantharia &amp; Anantharamaiah (2001) report line-to-continuum ratios of
+            a few ×10⁻⁴ to ~10⁻³ at 34.5 MHz across ℓ ≈ 352°–17°, with widths 19–54 km/s. The latitude widths and the
+            continuum profile are assumptions; neither paper gives a falloff law.</div>
+          <div><strong>Default values.</strong> The line inputs default to the best-measured case, toward the GC:
+            ∫τdν = 6.9 Hz and Δv = 31 km/s from the EDA stack (Oonk et al. 2019, n = 461–480);
+            T<sub>sky</sub> ≈ 27,000 K at 66 MHz toward the inner plane (Vydula et al. 2023); β = −2.46 (Mozdzen et al.
+            2019, GC overhead). Instrument defaults are generic: T<sub>rx</sub> = 0, 6 kHz channels, 3 h.
+            For a sky-average pointing at 1–30 MHz (e.g. a lunar-farside dipole), one set of values that gives ~100 mK
+            at 60 MHz: pointing scaling off, sky 2,850 K, β = −2.55, free-free turnover on at 6 MHz, ∫τdν = 0.35 Hz,
+            Δv = 60 km/s, pressure width 1.8 kHz at 30 MHz, 1 kHz channels.</div>
+          <div><strong>Caveats.</strong> Thermal noise only: bandpass, RFI and continuum-subtraction systematics are not
+            modelled and usually set the real observing time. A line falling between channels can lose up to ~2× more peak
+            at coarse Δν. Noise is assumed to integrate down cleanly across nights. γ is the least constrained input; away
+            from the 60 MHz anchor the result is only as good as γ. Stacking assumes every line in the bandwidth is usable.</div>
+        </div>
+      </details>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// PHYSICS-START
+const C_KMS = 299792.458;
+const CR_HZ = 3.28984e15;          // c · R_∞ (Hz); R_C differs by < 1e-4
+
+function erf(x) {                   // Abramowitz & Stegun 7.1.26, |err| < 1.5e-7
+  const s = Math.sign(x); x = Math.abs(x);
+  const t = 1 / (1 + 0.3275911 * x);
+  const y = 1 - (((((1.061405429 * t - 1.453152027) * t) + 1.421413741) * t
+              - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return s * y;
+}
+
+function tSky(nu, p) {
+  let T = p.TskyRef * Math.pow(nu / 66, p.betaSky);
+  if (p.applyTurnover) T *= Math.exp(-Math.pow(p.nuTurnover / nu, 2.1));
+  return T;
+}
+
+function tSys(nu, p) { return tSky(nu, p) + p.Trx / p.eta; }
+
+function principalN(nu) { return Math.pow(2 * CR_HZ / (nu * 1e6), 1 / 3); }
+
+function nLinesInBW(nu, bw_MHz) {
+  const spacing_MHz = 3 * nu / principalN(nu);
+  return Math.max(1, Math.floor(bw_MHz / spacing_MHz));
+}
+
+// Widths in kHz. Gaussian (Doppler) + Lorentzian (pressure + radiation), pseudo-Voigt (TCH).
+function lineWidths(nu, p) {
+  const fG = nu * 1e3 * p.dv / C_KMS;
+  const fP = p.pressRef * Math.pow(nu / 30, -1.47);
+  const fR = p.radRef   * Math.pow(nu / 30, -1.93);
+  const fL = fP + fR;
+  const f = Math.pow(
+    Math.pow(fG, 5) + 2.69269 * Math.pow(fG, 4) * fL + 2.42843 * Math.pow(fG, 3) * fL * fL +
+    4.47163 * fG * fG * Math.pow(fL, 3) + 0.07842 * fG * Math.pow(fL, 4) + Math.pow(fL, 5), 0.2);
+  const r = fL / f;
+  const eta = Math.min(1, Math.max(0, 1.36603 * r - 0.47719 * r * r + 0.11116 * r * r * r));
+  return { fG, fL, f, eta };
+}
+
+// Area-normalised profile at line centre (1/kHz)
+function peakProfile(w) {
+  return w.eta * 2 / (Math.PI * w.f) + (1 - w.eta) * 2 * Math.sqrt(Math.LN2 / Math.PI) / w.f;
+}
+
+// Profile averaged over one channel of width dnu_kHz centred on the line (1/kHz)
+function channelProfile(w, dnu_kHz) {
+  const lor = (2 / Math.PI) * Math.atan(dnu_kHz / w.f);
+  const gau = erf(dnu_kHz * Math.sqrt(Math.LN2) / w.f);
+  return (w.eta * lor + (1 - w.eta) * gau) / dnu_kHz;
+}
+
+function intTau(nu, p) { return p.intTauRef * Math.pow(nu / 60, p.gammaTau); }   // Hz
+
+function coverFrac(nu, p) {
+  if (!p.applyDilution) return 1;
+  const beam = p.beamScales ? p.beamRef * 60 / nu : p.beamRef;
+  return Math.min(1, p.srcWidth / beam);
+}
+
+function lineModel(nu, p) {
+  const w = lineWidths(nu, p);
+  const I = intTau(nu, p);
+  const tauPeak = I * peakProfile(w) / 1000;
+  const tauChan = I * channelProfile(w, p.dnu / 1000) / 1000;
+  const fc = coverFrac(nu, p);
+  const Tline = fc * tauChan * tSky(nu, p);
+  return { w, tauPeak, tauChan, fc, Tline, chanDil: tauChan / tauPeak };
+}
+
+function sigmaT(nu, p, N) {
+  return tSys(nu, p) / Math.sqrt(p.dnu * p.tint * N);
+}
+
+// Total on-source time (s, summed over days) to reach the threshold
+function tRequired(nu, p, N, Tline) {
+  return Math.pow(p.snrTarget * tSys(nu, p) / Tline, 2) / (p.dnu * N);
+}
+// PHYSICS-END
+
+// ── Control definitions ────────────────────────────────────────────
+
+const GROUPS = [
+  { title: 'Your observation', open: true, items: [
+    { id: 'hours', label: 'Total time on source', unit: 'h', min: 0.01, max: 10000, log: true,
+      units: [['s', 1 / 3600], ['min', 1 / 60], ['h', 1], ['d', 24]], autoUnit: h => h < 1 ? 'min' : h < 48 ? 'h' : 'd',
+      hint: 'Summed over all nights.' },
+    { id: 'dnu', label: 'Channel width', unit: 'kHz', min: 0.5, max: 30, step: 0.1,
+      chips: [[1, '1 kHz'], [6, '6 kHz · beamformer'], [23.9, '23.9 kHz · correlator']],
+      hint: 'Wider channels average more noise but dilute a narrow line.' },
+    { id: 'bw', label: 'Stack lines within', unit: 'MHz', min: 0.1, max: 30, step: 0.1,
+      dynHint: true },
+    { id: 'snr', label: 'Detection threshold', unit: 'σ', min: 3, max: 10, step: 0.5 },
+  ]},
+  { title: 'Pointing', sub: 'distance from the GC', open: true, items: [
+    { id: 'pointOn', type: 'toggle', label: 'Scale sky and line with distance from the GC' },
+    { id: 'lgc', label: 'Longitude offset |ℓ|', unit: '°', min: 0, max: 90, step: 0.5, dependsOn: 'pointOn' },
+    { id: 'bgc', label: 'Latitude offset |b|', unit: '°', min: 0, max: 30, step: 0.1, dependsOn: 'pointOn',
+      dynHint: true },
+  ]},
+  { title: 'Target', sub: 'sky and line', open: true, items: [
+    { id: 'tsky', label: 'Sky brightness at 66 MHz', labelFn: () => S.pointOn ? 'Sky brightness at the GC, 66 MHz' : 'Sky brightness at 66 MHz', unit: 'K', min: 100, max: 100000, log: true,
+      hint: '<b>~27,000 K</b> inner Galactic plane · <b>~2,850 K</b> sky average.' },
+    { id: 'inttau', label: 'Line strength ∫τ dν', labelFn: () => S.pointOn ? 'Line strength ∫τ dν at the GC' : 'Line strength ∫τ dν', unit: 'Hz', min: 0.01, max: 100, log: true,
+      hint: 'Per line, at 60 MHz. <b>6.9 Hz</b> toward the GC (EDA). A measured value already includes b<sub>n</sub>β<sub>n</sub>.' },
+    { id: 'dv', label: 'Line velocity width', unit: 'km/s', min: 1, max: 150, step: 1,
+      hint: '<b>31 km/s</b> toward the GC (EDA). Sets the Doppler FWHM, ν·Δv/c.' },
+  ]},
+  { title: 'Instrument', sub: 'receiver noise', open: false, items: [
+    { id: 'trx', label: 'Receiver temperature', unit: 'K', min: 0, max: 3000, step: 10,
+      hint: 'Only matters when it is comparable to the sky. At OVRO the sky dominates.' },
+    { id: 'eta', label: 'Radiation efficiency η', unit: '', min: 0.01, max: 1, step: 0.01,
+      hint: 'Scales the receiver term: T<sub>sys</sub> = T<sub>sky</sub> + T<sub>rx</sub>/η.' },
+  ]},
+  { title: 'Advanced physics', sub: 'broadening, spectra, dilution', open: false, items: [
+    { id: 'gamma', label: 'Line strength ∝ ν<sup>γ</sup>, γ', unit: '', min: -3, max: 3, step: 0.05,
+      hint: 'How ∫τdν changes away from 60 MHz. 0 = constant. Least constrained input.' },
+    { id: 'press', label: 'Pressure width at 30 MHz', unit: 'kHz', min: 0, max: 20, step: 0.1,
+      hint: 'Lorentzian, scales as ν<sup>−1.47</sup>. Matters most at low frequency.' },
+    { id: 'rad', label: 'Radiation width at 30 MHz', unit: 'kHz', min: 0, max: 20, step: 0.1,
+      hint: 'Lorentzian, scales as ν<sup>−1.93</sup>.' },
+    { id: 'beta', label: 'Sky spectral index β', unit: '', min: -3.5, max: -1.5, step: 0.01,
+      hint: 'Mozdzen et al. (2019): <b>−2.46</b> GC overhead · <b>−2.59 to −2.54</b> away from GC.' },
+    { id: 'turnoverOn', type: 'toggle', label: 'Free-free turnover in the sky spectrum' },
+    { id: 'turnover', label: 'Turnover frequency ν<sub>t</sub>', unit: 'MHz', min: 1, max: 15, step: 0.1, dependsOn: 'turnoverOn',
+      dynHint: true },
+    { id: 'dilutionOn', type: 'toggle', label: 'Line gas covers only part of the beam' },
+    { id: 'beam', label: 'Beam FWHM at 60 MHz', unit: '°', min: 0.5, max: 110, step: 0.5, dependsOn: 'dilutionOn' },
+    { id: 'beamScales', type: 'toggle', label: 'Beam shrinks as 1/ν (array)', dependsOn: 'dilutionOn' },
+    { id: 'src', label: 'Line-gas width (1D)', unit: '°', min: 0.1, max: 30, step: 0.1, dependsOn: 'dilutionOn',
+      hint: 'Covering fraction = min(1, gas width / beam). Leave off if gas and continuum fill the beam together.' },
+    { id: 'toff', label: 'Sky away from the plane, 66 MHz', unit: 'K', min: 100, max: 100000, log: true, dependsOn: 'pointOn',
+      hint: 'The floor the Galactic-plane continuum falls to. Default ~2,850 K sky average.' },
+    { id: 'cl', label: 'Continuum FWHM in ℓ', unit: '°', min: 1, max: 180, step: 1, dependsOn: 'pointOn' },
+    { id: 'cb', label: 'Continuum FWHM in b', unit: '°', min: 0.5, max: 60, step: 0.5, dependsOn: 'pointOn',
+      hint: '<b>Assumed</b> widths for the bright inner-plane continuum. Override with a sky-model value for your pointing.' },
+    { id: 'll', label: 'Line-strength FWHM in ℓ', unit: '°', min: 1, max: 180, step: 1, dependsOn: 'pointOn' },
+    { id: 'lb', label: 'Line-strength FWHM in b', unit: '°', min: 0.5, max: 60, step: 0.5, dependsOn: 'pointOn',
+      hint: 'ℓ default 40°: half strength at |ℓ| = 20°, matching the ~40° extent of Erickson et al. (1995). The b width is <b>assumed</b> ("several degrees" in that paper).' },
+  ]},
+  { title: 'Frequency range', sub: 'plot axis', open: false, items: [
+    { id: 'fmin', label: 'Lowest frequency', unit: 'MHz', min: 1, max: 99, step: 1 },
+    { id: 'fmax', label: 'Highest frequency', unit: 'MHz', min: 2, max: 100, step: 1 },
+  ]},
+];
+const ITEMS = GROUPS.flatMap(g => g.items);
+const ITEM = Object.fromEntries(ITEMS.map(it => [it.id, it]));
+const UNIT = {};   // display unit chosen for items with a unit menu
+function unitFactor(it) {
+  if (!it.units) return 1;
+  return (it.units.find(([u]) => u === UNIT[it.id]) || it.units[0])[1];
+}
+
+const DEFAULTS = {
+    fmin: 10, fmax: 100, hours: 3, dnu: 6, bw: 5, snr: 5,
+    tsky: 27000, inttau: 6.9, dv: 31, trx: 0, eta: 1,
+    gamma: 0, press: 0, rad: 0, beta: -2.46, turnoverOn: true, turnover: 4,
+    dilutionOn: false, beam: 2, beamScales: true, src: 1,
+    pointOn: true, lgc: 0, bgc: 0, toff: 2850, cl: 40, cb: 4, ll: 40, lb: 5,
+};
+
+let S = {};
+let view = 'time';
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+const $ = id => document.getElementById(id);
+const stripTags = s => s.replace(/<[^>]+>/g, '');
+
+function fmtNum(v) {
+  if (!isFinite(v)) return '';
+  if (Math.abs(v) >= 1000) return Number(v.toPrecision(4)).toString();
+  return Number(v.toPrecision(3)).toString();
+}
+
+function fmtK(v) {
+  if (v >= 1e6) return (v / 1e6).toPrecision(3) + ' MK';
+  if (v >= 1) return v.toPrecision(3) + ' K';
+  if (v >= 1e-3) return (v * 1e3).toPrecision(3) + ' mK';
+  return (v * 1e6).toPrecision(3) + ' µK';
+}
+
+function fmtTime(s) {
+  if (!isFinite(s)) return '∞';
+  if (s < 60) return s.toFixed(0) + ' s';
+  if (s < 3600) return (s / 60).toFixed(0) + ' min';
+  const h = s / 3600;
+  const hs = (h < 10 ? h.toFixed(1) : h.toFixed(0)) + ' h';
+  return h >= 48 ? `${hs} (${(h / 24).toFixed(1)} d)` : hs;
+}
+
+function gaussFWHM(x, fwhm) { return Math.exp(-4 * Math.LN2 * x * x / (fwhm * fwhm)); }
+
+// Fraction of the GC value at the pointing: continuum excess (gc) and line strength (gl)
+function pointing() {
+  if (!S.pointOn) return { gc: 1, gl: 1, tsky: S.tsky, inttau: S.inttau };
+  const gc = gaussFWHM(S.lgc, S.cl) * gaussFWHM(S.bgc, S.cb);
+  const gl = gaussFWHM(S.lgc, S.ll) * gaussFWHM(S.bgc, S.lb);
+  return { gc, gl, tsky: S.toff + (S.tsky - S.toff) * gc, inttau: S.inttau * gl };
+}
+
+function params() {
+  const pt = pointing();
+  return {
+    eta: S.eta, Trx: S.trx, tint: S.hours * 3600, dnu: S.dnu * 1e3,
+    intTauRef: pt.inttau, gammaTau: S.gamma, dv: S.dv, pressRef: S.press, radRef: S.rad,
+    TskyRef: pt.tsky, betaSky: S.beta,
+    applyTurnover: S.turnoverOn, nuTurnover: S.turnover,
+    applyDilution: S.dilutionOn, beamRef: S.beam, beamScales: S.beamScales, srcWidth: S.src,
+    snrTarget: S.snr,
+  };
+}
+
+function keyFrequencies() {
+  return [0.125, 0.375, 0.625, 0.875].map(q => Math.round((S.fmin + q * (S.fmax - S.fmin)) * 2) / 2);
+}
+
+function freqGrid() {
+  const g = [];
+  for (let i = 0; i <= 400; i++) g.push(S.fmin + (S.fmax - S.fmin) * i / 400);
+  return g;
+}
+
+// Everything the UI needs at one frequency
+function evalAt(f, p) {
+  const N = nLinesInBW(f, S.bw);
+  const L = lineModel(f, p);
+  const T = Math.abs(L.Tline);
+  const sig = sigmaT(f, p, N);
+  return { f, N, L, T, sig, snr: T / sig, tReq: tRequired(f, p, N, T) };
+}
+
+// ── Build controls ─────────────────────────────────────────────────
+
+function itemHTML(it) {
+  const hint = it.hint || it.dynHint ? `<div class="hint" id="hint-${it.id}">${it.hint || ''}</div>` : '';
+  if (it.type === 'toggle') {
+    return `<div class="toggle-row" id="row-${it.id}">
+        <label for="tg-${it.id}">${it.label}</label>
+        <label class="toggle"><input type="checkbox" id="tg-${it.id}"><span class="slider-tog"></span></label>
+      </div>${hint}`;
+  }
+  const lo = it.log ? Math.log10(it.min) : it.min;
+  const hi = it.log ? Math.log10(it.max) : it.max;
+  const step = it.log ? 0.001 : it.step;
+  const chips = it.chips ? `<div class="chips">${it.chips.map(([v, t]) =>
+      `<button class="chip" data-id="${it.id}" data-v="${v}">${t}</button>`).join('')}</div>` : '';
+  return `<div class="ctrl-row" id="row-${it.id}">
+      <div class="ctrl-label">
+        <label for="sl-${it.id}" id="lab-${it.id}">${it.label}</label>
+        <span class="val"><input class="num" id="num-${it.id}" inputmode="decimal" aria-label="${stripTags(it.label)} value">${it.units
+          ? `<select class="unit-sel" id="unit-${it.id}" aria-label="${stripTags(it.label)} unit">${it.units.map(([u]) => `<option>${u}</option>`).join('')}</select>`
+          : `<span class="unit">${it.unit}</span>`}</span>
+      </div>
+      <input type="range" id="sl-${it.id}" min="${lo}" max="${hi}" step="${step}">
+      ${chips}${hint}
+    </div>`;
+}
+
+function buildControls() {
+  $('ctrl-root').innerHTML = GROUPS.map(g => `
+    <details class="grp" ${g.open ? 'open' : ''}>
+      <summary>${g.title}${g.sub ? `<span class="sub">${g.sub}</span>` : ''}</summary>
+      <div class="grp-body">${g.items.map(itemHTML).join('')}</div>
+    </details>`).join('');
+
+  for (const it of ITEMS) {
+    if (it.type === 'toggle') {
+      $('tg-' + it.id).addEventListener('change', e => setValue(it.id, e.target.checked));
+      continue;
+    }
+    $('sl-' + it.id).addEventListener('input', e => {
+      const v = parseFloat(e.target.value);
+      const val = it.log ? Math.pow(10, v) : v;
+      if (it.autoUnit) UNIT[it.id] = it.autoUnit(val);   // dragging picks a readable unit
+      setValue(it.id, val);
+    });
+    const num = $('num-' + it.id);
+    const commit = () => {
+      const v = parseFloat(num.value) * unitFactor(it);   // typed value is in the shown unit
+      if (isFinite(v)) setValue(it.id, Math.min(it.max, Math.max(it.min, v)));
+      num.value = fmtNum(S[it.id] / unitFactor(it));
+    };
+    if (it.units) $('unit-' + it.id).addEventListener('change', e => { UNIT[it.id] = e.target.value; update(); });
+    num.addEventListener('change', commit);
+    num.addEventListener('keydown', e => { if (e.key === 'Enter') { commit(); num.blur(); } });
+  }
+  document.querySelectorAll('.chip').forEach(c =>
+    c.addEventListener('click', () => setValue(c.dataset.id, parseFloat(c.dataset.v))));
+}
+
+function setValue(id, v) {
+  S[id] = v;
+  if (id === 'fmin' && S.fmax <= S.fmin) S.fmax = Math.min(100, S.fmin + 1);
+  if (id === 'fmax' && S.fmin >= S.fmax) S.fmin = Math.max(1, S.fmax - 1);
+  update();
+}
+
+function syncControls() {
+  for (const it of ITEMS) {
+    const off = it.dependsOn && !S[it.dependsOn];
+    const row = $('row-' + it.id);
+    if (row) row.classList.toggle('disabled', !!off);
+    if (it.type === 'toggle') {
+      const tg = $('tg-' + it.id); tg.checked = !!S[it.id]; tg.disabled = !!off;
+      continue;
+    }
+    if (it.labelFn) $('lab-' + it.id).innerHTML = it.labelFn();
+    const sl = $('sl-' + it.id), num = $('num-' + it.id);
+    sl.value = it.log ? Math.log10(S[it.id]) : S[it.id];
+    sl.disabled = !!off; num.disabled = !!off;
+    if (document.activeElement !== num) num.value = fmtNum(S[it.id] / unitFactor(it));
+    if (it.units) $('unit-' + it.id).value = UNIT[it.id];
+  }
+  document.querySelectorAll('.chip').forEach(c =>
+    c.classList.toggle('on', Math.abs(S[c.dataset.id] - parseFloat(c.dataset.v)) < 1e-9));
+
+  // Changed-from-default status
+  const base = DEFAULTS;
+  const changed = ITEMS.filter(it => Math.abs((+S[it.id]) - (+base[it.id])) > 1e-9);
+  $('btn-reset').disabled = changed.length === 0;
+  const st = $('preset-status');
+  st.classList.toggle('mod', changed.length > 0);
+  st.textContent = changed.length
+    ? `Changed from defaults: ${changed.map(it => stripTags(it.label).replace(/ at \d+ MHz$/, '')).slice(0, 3).join(', ')}${changed.length > 3 ? ` +${changed.length - 3} more` : ''}`
+    : 'Defaults: line strength toward the GC (EDA), generic instrument. Change anything.';
+}
+
+// ── Chart ──────────────────────────────────────────────────────────
+
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+let chart = null;
+
+const CAPTIONS = {
+  time: 'Total on-source time needed to reach the threshold at each frequency. Anywhere the curve is <b>below the dashed line</b> (your time) is detectable.',
+  snr: 'Line depth in one channel against the thermal noise per channel after stacking. The line is detectable where green sits above white by your threshold.',
+  width: 'Line FWHM against your channel width. Channels much wider than the line dilute its peak; channels much narrower add noise for no gain.',
+};
+
+function makeChart() {
+  if (chart) chart.destroy();
+  const C = { a: cssVar('--series-a'), b: cssVar('--series-b'), c: cssVar('--series-c'), d: cssVar('--series-d'),
+              panel: cssVar('--panel'), border: cssVar('--border'), grid: cssVar('--grid'),
+              text: cssVar('--text'), label: cssVar('--label'), muted: cssVar('--muted') };
+  const line = (label, color, dash, extra = {}) => ({
+    label, data: [], borderColor: color, backgroundColor: color, borderWidth: 2,
+    pointRadius: 0, fill: false, tension: 0, borderDash: dash || [], ...extra });
+
+  let datasets, yTitle, yType, fmt;
+  if (view === 'time') {
+    datasets = [ line('Time needed', C.a), line('Your time on source', C.b, [6, 4], { borderWidth: 1.5 }) ];
+    yTitle = 'Time on source'; yType = 'logarithmic'; fmt = v => fmtTime(v * 3600);
+  } else if (view === 'snr') {
+    datasets = [ line('|T_line| in one channel', C.c), line('σ_T per channel (stacked)', C.b) ];
+    yTitle = 'Temperature'; yType = 'logarithmic'; fmt = fmtK;
+  } else {
+    datasets = [ line('Line FWHM (total)', C.a), line('Doppler part', C.c, [3, 3], { borderWidth: 1 }),
+                 line('Pressure + radiation part', C.d, [3, 3], { borderWidth: 1 }),
+                 line('Your channel width', C.b, [6, 4], { borderWidth: 1.5 }) ];
+    yTitle = 'Width (kHz)'; yType = 'linear'; fmt = v => v.toFixed(1) + ' kHz';
+  }
+
+  chart = new Chart($('myChart').getContext('2d'), {
+    type: 'line',
+    data: { datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      animation: { duration: 150 },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', align: 'start',
+          labels: { color: C.label, boxWidth: 18, boxHeight: 2, font: { size: 11 } } },
+        tooltip: {
+          backgroundColor: C.panel, borderColor: C.border, borderWidth: 1,
+          titleColor: C.a, bodyColor: C.text,
+          titleFont: { family: 'Space Mono', size: 11 }, bodyFont: { size: 11 },
+          callbacks: {
+            title: c => `ν = ${c[0].parsed.x.toFixed(1)} MHz`,
+            label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: { type: 'linear',
+          title: { display: true, text: 'Frequency (MHz)', color: C.muted, font: { family: 'Space Mono', size: 10 } },
+          ticks: { color: C.muted }, border: { color: C.border },
+          grid: { color: C.grid } },
+        y: { type: yType, min: yType === 'linear' ? 0 : undefined,
+          title: { display: true, text: yTitle, color: C.muted, font: { family: 'Space Mono', size: 10 } },
+          ticks: { color: C.muted, callback: v => fmt(v), maxTicksLimit: 8 }, border: { color: C.border },
+          grid: { color: C.grid } },
+      },
+    },
+  });
+}
+
+function fillChart(p, grid) {
+  const ds = chart.data.datasets;
+  const flat = y => [{ x: S.fmin, y }, { x: S.fmax, y }];
+  if (view === 'time') {
+    ds[0].data = grid.map(f => ({ x: f, y: evalAt(f, p).tReq / 3600 }));
+    ds[1].data = flat(S.hours);
+  } else if (view === 'snr') {
+    ds[0].data = grid.map(f => ({ x: f, y: evalAt(f, p).T }));
+    ds[1].data = grid.map(f => ({ x: f, y: evalAt(f, p).sig }));
+  } else {
+    ds[0].data = grid.map(f => ({ x: f, y: lineWidths(f, p).f }));
+    ds[1].data = grid.map(f => ({ x: f, y: lineWidths(f, p).fG }));
+    ds[2].data = (S.press > 0 || S.rad > 0) ? grid.map(f => ({ x: f, y: lineWidths(f, p).fL })) : [];
+    ds[3].data = flat(S.dnu);
+  }
+  chart.options.scales.x.min = S.fmin;
+  chart.options.scales.x.max = S.fmax;
+  chart.update();
+}
+
+// ── Verdict ────────────────────────────────────────────────────────
+
+function verdict(p, grid) {
+  const pts = grid.map(f => evalAt(f, p));
+  const ok = pts.map(e => e.snr >= S.snr);
+  const ranges = [];
+  let start = null;
+  pts.forEach((e, i) => {
+    if (ok[i] && start === null) start = e.f;
+    if ((!ok[i] || i === pts.length - 1) && start !== null) {
+      ranges.push([start, ok[i] ? e.f : pts[i - 1].f]); start = null;
+    }
+  });
+  const best = pts.reduce((a, b) => (b.tReq < a.tReq ? b : a));
+  const tStr = fmtTime(S.hours * 3600);
+  let html;
+  if (ranges.length && ok.every(Boolean)) {
+    html = `With <b>${tStr}</b> on source, a <b>${S.snr}σ</b> detection is <b class="good">reached across the whole ${S.fmin}–${S.fmax} MHz range</b>.`;
+  } else if (ranges.length) {
+    const r = ranges.map(([a, b]) => `${a.toFixed(0)}–${b.toFixed(0)} MHz`).join(', ');
+    html = `With <b>${tStr}</b> on source, a <b>${S.snr}σ</b> detection is <b class="good">reached at ${r}</b> but not elsewhere in ${S.fmin}–${S.fmax} MHz.`;
+  } else {
+    html = `With <b>${tStr}</b> on source, a <b>${S.snr}σ</b> detection is <b class="bad">not reached anywhere in ${S.fmin}–${S.fmax} MHz</b>.`;
+  }
+  $('verdict').innerHTML = html;
+  $('verdict-sub').textContent =
+    `Fastest at ${best.f.toFixed(1)} MHz: ${fmtTime(best.tReq)} for ${S.snr}σ, stacking ${best.N} line${best.N > 1 ? 's' : ''}. ` +
+    `Thermal noise only — systematics usually set the real observing time.`;
+}
+
+// ── Update ─────────────────────────────────────────────────────────
+
+function update() {
+  syncControls();
+  const p = params();
+  const grid = freqGrid();
+  const keyF = keyFrequencies();
+
+  const pt = pointing();
+  $('subtitle').textContent = `Carbon α lines · ${S.fmin}–${S.fmax} MHz` +
+    (S.pointOn ? ` · ℓ = ${fmtNum(S.lgc)}°, b = ${fmtNum(S.bgc)}° from the GC` : '');
+  $('hint-bgc').innerHTML = S.pointOn
+    ? `At this pointing: sky <b>${fmtNum(pt.tsky)} K</b> at 66 MHz, line strength <b>${fmtNum(pt.inttau)} Hz</b> (${(pt.gl * 100).toFixed(0)}% of the GC value).` +
+      (S.lgc > 20 ? ' <span style="color:var(--accent2)">Beyond |ℓ| ≈ 20° there are few low-frequency CRRL measurements; this is an extrapolation.</span>' : '')
+    : 'Off: sky brightness and line strength below are used as typed.';
+  $('hint-bw').innerHTML = 'Lines stacked: ' + keyF.map(f =>
+    `<b>${nLinesInBW(f, S.bw)}</b> near ${f} MHz`).join(' · ') + '. Use a value below the line spacing for one line.';
+  $('chart-caption').innerHTML = CAPTIONS[view];
+  const nuPeak = S.turnover * Math.pow(-S.beta / 2.1, -1 / 2.1);   // where ν^β·e^{−(ν_t/ν)^2.1} peaks
+  $('hint-turnover').innerHTML = S.turnoverOn
+    ? `Sky brightness peaks near <b>${nuPeak.toFixed(1)} MHz</b>; observed all-sky spectra turn over at ~3–5 MHz.
+       It lowers line and noise together, so it only changes the SNR through the receiver term.`
+    : 'Off: sky keeps rising as a power law to the lowest frequency.';
+
+  verdict(p, grid);
+  fillChart(p, grid);
+
+  $('metrics-strip').innerHTML = keyF.map(f => {
+    const e = evalAt(f, p);
+    const ok = e.snr >= S.snr;
+    return `
+      <div class="metric-card ${ok ? 'ok' : ''}">
+        <div class="metric-label">${f} MHz · ${e.N} line${e.N > 1 ? 's' : ''} stacked</div>
+        <div class="metric-big">${S.snr}σ in <b>${fmtTime(e.tReq)}</b></div>
+        <div class="metric-unit">SNR <b>${e.snr.toFixed(1)}</b> with your ${fmtTime(p.tint)}</div>
+        <div class="metric-unit">Peak τ ${e.L.tauPeak.toExponential(1)} · FWHM ${e.L.w.f.toFixed(1)} kHz</div>
+        <div class="metric-unit">Channel keeps <b>${(e.L.chanDil * 100).toFixed(0)}%</b> of the peak${S.dilutionOn ? ` · covering ${(e.L.fc * 100).toFixed(0)}%` : ''}</div>
+      </div>`;
+  }).join('');
+}
+
+// ── Copy summary ───────────────────────────────────────────────────
+
+function summaryText() {
+  const p = params();
+  const lines = ['RRL sensitivity calculator', 'Inputs:'];
+  for (const it of ITEMS) {
+    if (it.dependsOn && !S[it.dependsOn]) continue;
+    const v = it.type === 'toggle' ? (S[it.id] ? 'on' : 'off')
+      : it.id === 'hours' ? fmtTime(S.hours * 3600) : `${fmtNum(S[it.id])} ${it.unit}`.trim();
+    lines.push(`  ${stripTags(it.label)}: ${v}`);
+  }
+  lines.push('', 'ν (MHz)\tN lines\tpeak τ\tFWHM (kHz)\tchannel keeps\tSNR\ttime to ' + S.snr + 'σ');
+  for (const f of keyFrequencies()) {
+    const e = evalAt(f, p);
+    lines.push([f, e.N, e.L.tauPeak.toExponential(2), e.L.w.f.toFixed(2),
+      (e.L.chanDil * 100).toFixed(0) + '%', e.snr.toFixed(1), fmtTime(e.tReq)].join('\t'));
+  }
+  lines.push('', stripTags($('verdict').innerHTML));
+  return lines.join('\n');
+}
+
+$('btn-copy').addEventListener('click', async () => {
+  const st = $('copy-status');
+  try {
+    await navigator.clipboard.writeText(summaryText());
+    st.style.color = 'var(--good)'; st.textContent = 'Copied — paste into a doc or email.';
+  } catch (e) {
+    st.style.color = 'var(--bad)'; st.textContent = 'Copy is blocked here; try opening the file in a browser tab.';
+  }
+  setTimeout(() => { st.textContent = ''; }, 4000);
+});
+
+// ── Defaults & tabs ────────────────────────────────────────────────
+
+function loadDefaults() {
+  S = { ...DEFAULTS };
+  for (const it of ITEMS) if (it.autoUnit) UNIT[it.id] = it.autoUnit(S[it.id]);
+  update();
+}
+
+$('btn-reset').addEventListener('click', loadDefaults);
+
+document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
+  view = t.dataset.view;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === t));
+  makeChart();
+  update();
+}));
+
+// ── Theme ──────────────────────────────────────────────────────────
+
+function savedTheme() { try { return localStorage.getItem('rrl-theme'); } catch (e) { return null; } }
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  $('btn-theme').textContent = t === 'light' ? '☾ Dark' : '☀ Light';
+  try { localStorage.setItem('rrl-theme', t); } catch (e) {}
+}
+const systemLight = window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches;
+applyTheme(savedTheme() || (systemLight ? 'light' : 'dark'));
+$('btn-theme').addEventListener('click', () => {
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light');
+  makeChart();
+  update();
+});
+
+buildControls();
+makeChart();
+loadDefaults();
+</script>
+</body>
+</html>
